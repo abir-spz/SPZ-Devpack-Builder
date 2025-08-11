@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <title>SPZ Devpack Builder v1.0.0</title>
+
+        <link rel="icon" href="images/favicon-32x32.png" type="image/png">
+        
+        <!-- styles -->
+        <link rel="stylesheet" href="styles/app.css">
+    </head>
+
+    <body class="devpack-app-body">
+        <div class="devpack">
+            <!-- banner -->
+            <div class="devpack__banner">
+                <div class="container">
+                    <div class="devpack__banner__row">
+                        <div class="devpack__banner__col">
+                            <h1 class="devpack__title">SPZ Devpack Builder<small>v1.0.0</small></h1>
+                            <p class="devpack__note">Note: This only works in Chromium-based browsers (like Chrome or Edge).</p>
+                        </div>
+                        <div class="devpack__banner__col">
+                            <img src="images/transfer-files-amico.svg" alt="">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- main app block -->
+            <div class="devpack__main">
+                <!-- seperator -->
+                <div class="custom-shape-divider-top-1754902179">
+                    <svg data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 120" preserveAspectRatio="none">
+                        <path d="M0,0V46.29c47.79,22.2,103.59,32.17,158,28,70.36-5.37,136.33-33.31,206.8-37.5C438.64,32.43,512.34,53.67,583,72.05c69.27,18,138.3,24.88,209.4,13.08,36.15-6,69.85-17.84,104.45-29.34C989.49,25,1113-14.29,1200,52.47V0Z" opacity=".25" class="shape-fill"></path>
+                        <path d="M0,0V15.81C13,36.92,27.64,56.86,47.69,72.05,99.41,111.27,165,111,224.58,91.58c31.15-10.15,60.09-26.07,89.67-39.8,40.92-19,84.73-46,130.83-49.67,36.26-2.85,70.9,9.42,98.6,31.56,31.77,25.39,62.32,62,103.63,73,40.44,10.79,81.35-6.69,119.13-24.28s75.16-39,116.92-43.05c59.73-5.85,113.28,22.88,168.9,38.84,30.2,8.66,59,6.17,87.09-7.5,22.43-10.89,48-26.93,60.65-49.24V0Z" opacity=".5" class="shape-fill"></path>
+                        <path d="M0,0V5.63C149.93,59,314.09,71.32,475.83,42.57c43-7.64,84.23-20.12,127.61-26.46,59-8.63,112.48,12.24,165.56,35.4C827.93,77.22,886,95.24,951.2,90c86.53-7,172.46-45.71,248.8-84.81V0Z" class="shape-fill"></path>
+                    </svg>
+                </div>
+
+                <div class="container">
+                    <!-- File type filters -->
+                    <div class="devpack__filters">
+                        <label><input type="checkbox" id="includeJS" checked class="js-include-js" /> Include JS</label>
+                        <label><input type="checkbox" id="includeCSS" checked class="js-include-css" /> Include CSS</label>
+                        <label><input type="checkbox" id="includeFonts" checked class="js-include-fonts" /> Include Fonts</label>
+                        <label><input type="checkbox" id="includeImages" checked class="js-include-images" /> Include Images</label>
+                    </div>
+
+                    <!-- File uploaders -->
+                    <div class="devpack__uploaders">
+                        <div class="devpack__dropzone js-dropzone">
+                            Drag & Drop JS/CSS/HTML Files Here
+                        </div>
+                        <div class="devpack__uploaders__group">
+                            <div class="devpack__uploaders__group__single">
+                                <span>Upload</span>
+                                <span>JS</span>
+
+                                <input type="file" multiple accept=".js" class="devpack__input js-js-files" />
+                            </div>
+
+                            <div class="devpack__uploaders__group__single">
+                                <span>Upload</span>
+                                <span>CSS</span>
+
+                                <input type="file" multiple accept=".css" class="devpack__input js-css-files" />
+                            </div>
+
+                            <div class="devpack__uploaders__group__single">
+                                <span>Upload</span>
+                                <span>HTML</span>
+
+                                <input type="file" multiple accept=".html" class="devpack__input js-html-files" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action buttons -->
+                    <div class="devpack__actions">
+                        <button class="devpack__btn devpack__btn--scan js-btn-scan">Scan & Validate</button>
+                        <button class="devpack__btn devpack__btn--download js-btn-download">Proceed to Download</button>
+                    </div>
+
+                    <!-- Preview and result -->
+                    <div class="devpack__preview js-preview"></div>
+                    <div class="devpack__result js-result"></div>
+                </div>
+            </div>
+
+            <!-- footer -->
+            <div class="devpack__footer">
+                <div class="container">
+                    <div class="devpack__footer__row">
+                        <div class="devpack__footer__col is-left">
+                            <p>&copy; 2025. Spiralyze LLC.</p>
+                        </div>
+                        <div class="devpack__footer__col is-center">
+                            <p>Made with ❤️ and keyboard.</p>
+                        </div>
+                        <div class="devpack__footer__col is-right">
+                            <p>Collaboration by Abir Maiti &amp; ChatGPT.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ZIP modal -->
+        <div class="modal js-modal">
+            <div class="modal__content">
+                <h2 class="modal__title">Enter Devpack Details</h2>
+                <input type="text" placeholder="Test Name (e.g., maxio)" class="modal__input js-test-name">
+                <input type="text" placeholder="Test Number (e.g., 1010)" class="modal__input js-test-number">
+                <button class="modal__btn js-generate-zip" disabled>Download ZIP</button>
+            </div>
+        </div>
+
+        <!-- Image modal -->
+        <div class="image-modal js-image-modal">
+            <div class="image-modal__content">
+                <button class="image-modal__close js-image-modal-close">&times;</button>
+                <img src="" alt="Preview" class="js-image-modal-preview image-modal__preview" />
+                <div class="image-modal__url js-image-modal-url"></div>
+                <a href="#" target="_blank" download class="image-modal__download js-image-modal-download">Download Image</a>
+            </div>
+        </div>
+
+        <!-- Libraries -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+        <!-- main app logic -->
+        <script src="js/app.js"></script>
+    </body>
+</html>
