@@ -186,7 +186,9 @@ async function extractAssetsFromFiles(files, include) {
     // - CSS url(...) with or without quotes
     // - Protocol-relative and absolute URLs
     // - Common web asset extensions
-    const urlRegex = /(?:url\(\s*['"]?|['"])?((?:https?:)?\/\/[^\s"'()]+?\.(js|css|png|jpe?g|svg|webp|woff2?|ttf|otf|eot)(\?[^\s"'()]*)?)(?:['"]?\s*\))?/gi;
+        // Improved regex: only match file extensions after a slash, not in the domain
+    const urlRegex = /(?:url\(\s*['"]?|['"])?((?:https?:)?\/\/[^\s"'()]+\/[^\s"'()]+?\.(js|css|png|jpe?g|svg|webp|woff2?|ttf|otf|eot)(\?[^\s"'()]*)?)(?:['"]?\s*\))?/gi;
+    // prev const urlRegex = /(?:url\(\s*['"]?|['"])?((?:https?:)?\/\/[^\s"'()]+?\.(js|css|png|jpe?g|svg|webp|woff2?|ttf|otf|eot)(\?[^\s"'()]*)?)(?:['"]?\s*\))?/gi;
 
     for (const file of files) {
         try {
