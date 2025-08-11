@@ -19,8 +19,9 @@ body { margin: 0; font-family: var(--system-ui); background-color: #ffffff; colo
 .devpack__banner__col:nth-child(2) { flex: 1; text-align: right; }
 
 .devpack__title { font-size: 32px; line-height: 36px; font-weight: bold; color: #F44336; margin-bottom: 16px; }
-.devpack__title small { display: block; font-size: 16px; line-height: 16px; font-weight: 400; color: #7e7e7e;; }
+.devpack__title small { display: block; font-size: 14px; line-height: 16px; font-weight: 400; color: #7e7e7e;; }
 
+.devpack__note__small { font-size: 16px; color: #b2b2b2; margin-bottom: 25px; }
 .devpack__note { font-size: 18px; color: #cddc39; margin-bottom: 0px; }
 
 .devpack__banner img { width: 250px; }
