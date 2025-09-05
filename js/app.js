@@ -120,11 +120,16 @@ scanBtn.addEventListener('click', processFiles);
  * Main scan function: reads uploaded files, extracts URLs, validates them.
  */
 async function processFiles() {
+    // Add selectors for videos and gifs
+    const videoCheckbox = document.querySelector('.js-include-videos');
+    const gifCheckbox = document.querySelector('.js-include-gifs');
     const include = {
         js: jsCheckbox.checked,
         css: cssCheckbox.checked,
         fonts: fontCheckbox.checked,
-        images: imgCheckbox.checked
+        images: imgCheckbox.checked,
+        videos: videoCheckbox ? videoCheckbox.checked : true,
+        gifs: gifCheckbox ? gifCheckbox.checked : true
     };
 
     const allFiles = [
@@ -154,7 +159,16 @@ async function processFiles() {
 
     const excluded = Object.keys(include).filter(key => !include[key]);
     if (excluded.length > 0) {
-        resultBox.innerText += `\n\n⚠️ Excluded from scan: ${excluded.map(e => e.toUpperCase()).join(', ')}`;
+        // Custom labels for user-friendly message
+        const labelMap = {
+            js: 'JS',
+            css: 'CSS',
+            fonts: 'FONTS',
+            images: 'IMAGES',
+            videos: 'VIDEOS',
+            gifs: 'GIFS'
+        };
+        resultBox.innerText += `\n\n⚠️ Excluded from scan: ${excluded.map(e => labelMap[e] || e.toUpperCase()).join(', ')}`;
     }
 
     // Step 4: show failed URLs (CORS, 404 etc.)
