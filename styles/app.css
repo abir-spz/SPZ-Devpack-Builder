@@ -1,3 +1,84 @@
+@media (max-width: 900px) {
+    .container {
+        padding: 16px;
+    }
+    .devpack__banner__row {
+        flex-direction: column;
+        gap: 24px;
+        text-align: center;
+    }
+    .devpack__banner__col {
+        flex: unset;
+        width: 100%;
+        text-align: center;
+    }
+    .devpack__banner img {
+        width: 180px;
+        margin: 0 auto;
+    }
+    .devpack__main .container {
+        padding: 10px;
+    }
+    .devpack__footer .container {
+        padding: 0 10px;
+    }
+    .preview-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .container {
+        padding: 6px;
+    }
+    .devpack__banner {
+        padding: 40px 0 20px;
+    }
+    .devpack__title {
+        font-size: 22px;
+        line-height: 26px;
+    }
+    .devpack__main .container {
+        padding: 2px;
+    }
+    .devpack__filters {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        font-size: 15px;
+    }
+    .devpack__uploaders__group {
+        flex-direction: column;
+        gap: 8px;
+        position: static;
+        top: unset;
+        left: unset;
+    }
+    .devpack__dropzone {
+        padding: 40px 8px;
+        font-size: 15px;
+    }
+    .devpack__actions {
+        flex-direction: column;
+        gap: 10px;
+    }
+    .preview-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .modal__content {
+        max-width: 98vw;
+        padding: 10px;
+    }
+    .image-modal__content {
+        max-width: 98vw;
+        padding: 8px;
+    }
+    .devpack__footer__row {
+        flex-direction: column;
+        gap: 4px;
+        text-align: center;
+    }
+}
 :root {
     --system-ui: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
 }

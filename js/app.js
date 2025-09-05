@@ -187,7 +187,7 @@ async function extractAssetsFromFiles(files, include) {
     // - Protocol-relative and absolute URLs
     // - Common web asset extensions
         // Improved regex: only match file extensions after a slash, not in the domain
-    const urlRegex = /(?:url\(\s*['"]?|['"])?((?:https?:)?\/\/[^\s"'()]+\/[^\s"'()]+?\.(js|css|png|jpe?g|svg|webp|woff2?|ttf|otf|eot)(\?[^\s"'()]*)?)(?:['"]?\s*\))?/gi;
+        const urlRegex = /(?:url\(\s*['"]?|['"])?((?:https?:)?\/\/[^\s"'()]+\/[^\s"'()]+?\.(js|css|png|jpe?g|svg|webp|gif|mp4|webm|ogg|woff2?|ttf|otf|eot)(\?[^\s"'()]*)?)(?:['"]?\s*\))?/gi;
     // prev const urlRegex = /(?:url\(\s*['"]?|['"])?((?:https?:)?\/\/[^\s"'()]+?\.(js|css|png|jpe?g|svg|webp|woff2?|ttf|otf|eot)(\?[^\s"'()]*)?)(?:['"]?\s*\))?/gi;
 
     for (const file of files) {
@@ -206,7 +206,7 @@ async function extractAssetsFromFiles(files, include) {
                     assets.js.add(fullUrl);
                 } else if ((fullUrl.endsWith('.css') || fullUrl.includes('.css?')) && include.css) {
                     assets.css.add(fullUrl);
-                } else if (/\.(png|jpe?g|svg|webp)([\?#][^"')\s]*)?$/i.test(fullUrl) && include.images) {
+                } else if (/\.(png|jpe?g|svg|webp|gif|mp4|webm|ogg)([\?#][^"')\s]*)?$/i.test(fullUrl) && include.images) {
                     assets.images.add(fullUrl);
                 } else if (/\.(woff2?|ttf|otf|eot)([\?#][^"')\s]*)?$/i.test(fullUrl) && include.fonts) {
                     assets.fonts.add(fullUrl);
@@ -216,14 +216,6 @@ async function extractAssetsFromFiles(files, include) {
             console.warn(`Error reading file "${file.name}":`, err);
         }
     }
-
-    // for debugging purpose
-    console.log('Extracted assets:', {
-        images: [...assets.images],
-        css: [...assets.css],
-        js: [...assets.js],
-        fonts: [...assets.fonts]
-    });
 
     return assets;
 }
@@ -394,7 +386,7 @@ async function validateAndFetchAssets(assets) {
 /*  ==================================================
     ZIP DOWNLOAD MODAL INPUTS LOGIC
     ================================================== */
-[testNameInput, testNumberInput].forEach(input =>
+[testNameInput].forEach(input =>
     input.addEventListener('input', validateInputs)
 );
 
@@ -402,18 +394,31 @@ async function validateAndFetchAssets(assets) {
  * Enables "Download ZIP" button if inputs are valid
  */
 function validateInputs() {
-    const name = testNameInput.value.trim();
-    const number = testNumberInput.value.trim();
-    const isValid = /^[a-z0-9]+$/.test(name) && /^[a-z0-9]+$/.test(number);
+    let name = testNameInput.value.trim();
+
+    // Replace spaces with hyphens, remove special characters
+    name = name.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
+
+    testNameInput.value = name;
+
+    // Accept uppercase, lowercase, numbers, hyphens, and long text
+    const isValid = /^[a-zA-Z0-9-]+$/.test(name) && name.length > 0;
     generateBtn.disabled = !isValid;
 }
 
 downloadBtn.addEventListener('click', () => {
-    if (zipContent && Object.values(zipContent).some(map => map.size > 0)) {
-        modal.classList.add('modal--show');
-    } else {
-        alert("Please scan and validate assets first.");
+    // Allow download if there are validated assets OR user-uploaded files
+    let hasAssets = false;
+    if (zipContent && typeof zipContent === 'object') {
+        const maps = Object.values(zipContent).filter(map => map instanceof Map);
+        hasAssets = maps.some(map => map.size > 0);
     }
+    // Fallback: if no assets, but user uploaded files exist, allow download
+    if (hasAssets || (collectedFiles && collectedFiles.length > 0)) {
+        modal.classList.add('modal--show');
+        return;
+    }
+    alert("Please scan and validate assets first.");
 });
 
 
@@ -422,23 +427,21 @@ downloadBtn.addEventListener('click', () => {
     ================================================== */
 generateBtn.addEventListener('click', async () => {
     const name = testNameInput.value.trim();
-    const number = testNumberInput.value.trim();
     const date = new Date().toLocaleDateString('en-GB', {
         day: '2-digit',
         month: 'long',
         year: 'numeric'
     }).replace(/ /g, '-').toLowerCase();
 
-    const filename = `devpack-${name}-${number}-${date}.zip`;
-    const folderName = `${name}-${number}-devpack`;
+    const filename = `Devpack-${name}-${date}.zip`;
+    const folderName = `${name}-devpack`;
+
 
     const zip = new JSZip();
     const root = zip.folder(folderName);
-    const assets = root.folder("assets");
 
     // Deduplicate by file content key
     const fileKeyTracker = new Set();
-
     collectedFiles.forEach(file => {
         const fileKey = `${file.name}-${file.size}-${file.lastModified}`;
         let baseName = file.name;
@@ -450,25 +453,118 @@ generateBtn.addEventListener('click', async () => {
         root.file(baseName, file);
     });
 
-    for (const [type, files] of Object.entries(zipContent)) {
-        if (files.size === 0) continue;
-        const subfolder = assets.folder(type);
+    // Only create folders if there are any assets of that type
+    const hasAssets = (type) => zipContent[type] && zipContent[type].size > 0;
 
-        // Track normalized filenames to avoid duplicates (strip query/hash)
+    // Assets folder for images, fonts, videos, gifs, etc.
+    if (hasAssets('images') || hasAssets('fonts') || hasAssets('videos') || hasAssets('gifs')) {
+        const assets = root.folder('assets');
+        // Images
+        if (hasAssets('images')) {
+            const imgFolder = assets.folder('images');
+            const normalizedTracker = new Set();
+            zipContent.images.forEach((blob, filename) => {
+                // Only add if not gif or video
+                if (!/\.(gif|mp4|webm|ogg)$/i.test(filename)) {
+                    const baseFilename = filename.split(/[?#]/)[0];
+                    let finalName = baseFilename;
+                    let i = 1;
+                    while (normalizedTracker.has(finalName)) {
+                        finalName = `duplicate-${i++}-${baseFilename}`;
+                    }
+                    normalizedTracker.add(finalName);
+                    imgFolder.file(finalName, blob);
+                }
+            });
+        }
+        // Fonts
+        if (hasAssets('fonts')) {
+            const fontFolder = assets.folder('fonts');
+            const normalizedTracker = new Set();
+            zipContent.fonts.forEach((blob, filename) => {
+                const baseFilename = filename.split(/[?#]/)[0];
+                let finalName = baseFilename;
+                let i = 1;
+                while (normalizedTracker.has(finalName)) {
+                    finalName = `duplicate-${i++}-${baseFilename}`;
+                }
+                normalizedTracker.add(finalName);
+                fontFolder.file(finalName, blob);
+            });
+        }
+        // Videos
+        let hasVideo = false;
+        zipContent.images && zipContent.images.forEach((_, filename) => {
+            if (/\.(mp4|webm|ogg)$/i.test(filename)) hasVideo = true;
+        });
+        if (hasVideo) {
+            const videoFolder = assets.folder('videos');
+            const normalizedTracker = new Set();
+            zipContent.images.forEach((blob, filename) => {
+                if (/\.(mp4|webm|ogg)$/i.test(filename)) {
+                    const baseFilename = filename.split(/[?#]/)[0];
+                    let finalName = baseFilename;
+                    let i = 1;
+                    while (normalizedTracker.has(finalName)) {
+                        finalName = `duplicate-${i++}-${baseFilename}`;
+                    }
+                    normalizedTracker.add(finalName);
+                    videoFolder.file(finalName, blob);
+                }
+            });
+        }
+        // Gifs
+        let hasGif = false;
+        zipContent.images && zipContent.images.forEach((_, filename) => {
+            if (/\.gif$/i.test(filename)) hasGif = true;
+        });
+        if (hasGif) {
+            const gifFolder = assets.folder('gifs');
+            const normalizedTracker = new Set();
+            zipContent.images.forEach((blob, filename) => {
+                if (/\.gif$/i.test(filename)) {
+                    const baseFilename = filename.split(/[?#]/)[0];
+                    let finalName = baseFilename;
+                    let i = 1;
+                    while (normalizedTracker.has(finalName)) {
+                        finalName = `duplicate-${i++}-${baseFilename}`;
+                    }
+                    normalizedTracker.add(finalName);
+                    gifFolder.file(finalName, blob);
+                }
+            });
+        }
+    }
+
+    // Script folder for js
+    if (hasAssets('js')) {
+        const scriptFolder = root.folder('script');
         const normalizedTracker = new Set();
-
-        files.forEach((blob, filename) => {
-            // Strip query/hash from filename
+        zipContent.js.forEach((blob, filename) => {
             const baseFilename = filename.split(/[?#]/)[0];
-
             let finalName = baseFilename;
             let i = 1;
             while (normalizedTracker.has(finalName)) {
                 finalName = `duplicate-${i++}-${baseFilename}`;
             }
             normalizedTracker.add(finalName);
+            scriptFolder.file(finalName, blob);
+        });
+    }
 
-            subfolder.file(finalName, blob);
+    // Style folder for css
+    if (hasAssets('css')) {
+        const styleFolder = root.folder('style');
+        const normalizedTracker = new Set();
+        zipContent.css.forEach((blob, filename) => {
+            const baseFilename = filename.split(/[?#]/)[0];
+            let finalName = baseFilename;
+            let i = 1;
+            while (normalizedTracker.has(finalName)) {
+                finalName = `duplicate-${i++}-${baseFilename}`;
+            }
+            normalizedTracker.add(finalName);
+            styleFolder.file(finalName, blob);
         });
     }
 

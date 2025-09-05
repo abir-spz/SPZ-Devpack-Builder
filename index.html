@@ -45,8 +45,10 @@
                     <div class="devpack__filters">
                         <label><input type="checkbox" id="includeJS" checked class="js-include-js" /> Include JS</label>
                         <label><input type="checkbox" id="includeCSS" checked class="js-include-css" /> Include CSS</label>
-                        <label><input type="checkbox" id="includeFonts" checked class="js-include-fonts" /> Include Fonts</label>
                         <label><input type="checkbox" id="includeImages" checked class="js-include-images" /> Include Images</label>
+                        <label><input type="checkbox" id="includeFonts"  class="js-include-fonts" /> Include Fonts</label>
+                        <label><input type="checkbox" id="includeVideos" class="js-include-videos" /> Include Videos</label>
+                        <label><input type="checkbox" id="includeGifs" class="js-include-gifs" /> Include GIFs</label>
                     </div>
 
                     <!-- File uploaders -->
@@ -111,9 +113,8 @@
         <!-- ZIP modal -->
         <div class="modal js-modal">
             <div class="modal__content">
-                <h2 class="modal__title">Enter Devpack Details</h2>
+                <h2 class="modal__title">Enter Devpack Name</h2>
                 <input type="text" placeholder="Test Name (e.g., maxio)" class="modal__input js-test-name">
-                <input type="text" placeholder="Test Number (e.g., 1010)" class="modal__input js-test-number">
                 <button class="modal__btn js-generate-zip" disabled>Download ZIP</button>
             </div>
         </div>
