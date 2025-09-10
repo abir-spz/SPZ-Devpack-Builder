@@ -9,6 +9,7 @@
         
         <!-- styles -->
         <link rel="stylesheet" href="styles/app.css">
+        <link rel="stylesheet" href="styles/contributors.css">
     </head>
 
     <body class="devpack-app-body">
@@ -92,6 +93,19 @@
                 </div>
             </div>
 
+            <!-- list of contributors -->
+            <div class="devpack__contributors">
+                <div class="container">
+                    <h2 class="devpack__contributors__heading">
+                        <span>The Contributors</span>
+                        <small>All the people from Spiralyze who took a little time to collaborate and improve the tool.</small>
+                    </h2>
+
+                    <!-- container to populate contributors -->
+                    <div id="contributors-list" class="devpack__contributors__list"></div>
+                </div>
+            </div>
+
             <!-- footer -->
             <div class="devpack__footer">
                 <div class="container">
@@ -135,5 +149,6 @@
 
         <!-- main app logic -->
         <script src="js/app.js"></script>
+        <script src="js/contributors.js"></script>
     </body>
 </html>
