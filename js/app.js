@@ -31,10 +31,15 @@ const CLOUDINARY_UPLOAD_ROOT = 'https://res.cloudinary.com/spiralyze/image/uploa
     DOM REFERENCES (SELECTORS)
     ================================================== */
 // Filters
+const selectAllCheckbox = document.querySelector('.js-select-all');
 const jsCheckbox = document.querySelector('.js-include-js');
 const cssCheckbox = document.querySelector('.js-include-css');
 const fontCheckbox = document.querySelector('.js-include-fonts');
 const imgCheckbox = document.querySelector('.js-include-images');
+const videoCheckbox = document.querySelector('.js-include-videos');
+const gifCheckbox = document.querySelector('.js-include-gifs');
+
+const filterCheckboxes = [jsCheckbox, cssCheckbox, imgCheckbox, fontCheckbox, videoCheckbox, gifCheckbox].filter(Boolean);
 
 // drag/dropzon
 const dropzone = document.querySelector('.js-dropzone');
@@ -87,6 +92,53 @@ allFilesInput.addEventListener('change', () => {
     const files = [...allFilesInput.files];
     updatePreview(files);
 });
+
+/*  ==================================================
+    SELECT ALL FILTERS LOGIC (3-state cycle: All → None → JS/CSS/Images → All)
+    ================================================== */
+const CORE_CHECKBOXES = [jsCheckbox, cssCheckbox, imgCheckbox]; // JS, CSS, Images
+const EXTRA_CHECKBOXES = [fontCheckbox, videoCheckbox, gifCheckbox]; // Fonts, Videos, GIFs
+
+function applySelectAllState(state) {
+    // state: 'all' | 'none' | 'core'
+    if (state === 'all') {
+        filterCheckboxes.forEach(cb => { if (cb) cb.checked = true; });
+    } else if (state === 'none') {
+        filterCheckboxes.forEach(cb => { if (cb) cb.checked = false; });
+    } else {
+        // 'core' = JS, CSS, Images only
+        CORE_CHECKBOXES.forEach(cb => { if (cb) cb.checked = true; });
+        EXTRA_CHECKBOXES.forEach(cb => { if (cb) cb.checked = false; });
+    }
+}
+
+function updateSelectAllDisplay() {
+    if (!selectAllCheckbox) return;
+    const allChecked = filterCheckboxes.every(cb => cb.checked);
+    const noneChecked = filterCheckboxes.every(cb => !cb.checked);
+    const coreOnlyChecked = CORE_CHECKBOXES.every(cb => cb?.checked) && EXTRA_CHECKBOXES.every(cb => !cb?.checked);
+    selectAllCheckbox.checked = allChecked;
+    selectAllCheckbox.indeterminate = !allChecked && !noneChecked;
+}
+
+if (selectAllCheckbox) {
+    selectAllCheckbox.addEventListener('change', () => {
+        const allChecked = filterCheckboxes.every(cb => cb.checked);
+        const noneChecked = filterCheckboxes.every(cb => !cb.checked);
+        const coreOnlyChecked = CORE_CHECKBOXES.every(cb => cb?.checked) && EXTRA_CHECKBOXES.every(cb => !cb?.checked);
+
+        if (allChecked) {
+            applySelectAllState('none');      // 1st click: All → None
+        } else if (noneChecked) {
+            applySelectAllState('core');      // 2nd click: None → JS/CSS/Images
+        } else {
+            applySelectAllState('all');       // 3rd click: JS/CSS/Images → All
+        }
+        updateSelectAllDisplay();
+    });
+    filterCheckboxes.forEach(cb => cb?.addEventListener('change', updateSelectAllDisplay));
+    updateSelectAllDisplay(); // Set initial display
+}
 
 /**
  * Shows an error message above the CTAs. Pass empty string to hide.

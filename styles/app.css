@@ -272,6 +272,10 @@ body {
     margin-bottom: 20px;
 }
 
+.devpack__filters label {
+    cursor: pointer;
+}
+
 /* FILE UPLOADER */
 .devpack__uploaders {
     display: flex;
