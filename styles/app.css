@@ -436,6 +436,16 @@ body {
     overflow: hidden;
 }
 
+.preview-section--json .preview-summary {
+    background: #f8fafc;
+    border-left: 3px solid #6366f1;
+}
+
+.preview-section--json .preview-summary small {
+    font-weight: 400;
+    color: #64748b;
+}
+
 .preview-summary {
     padding: 10px 15px;
     background: #ffffff;

@@ -25,6 +25,8 @@ const MEDIA_BASE_URL = 'https://res.cloudinary.com/spiralyze/';
 
 // Canonical root for resolving relative paths (avoids wrong combos like 3002 base + 3001 path)
 const CLOUDINARY_UPLOAD_ROOT = 'https://res.cloudinary.com/spiralyze/image/upload/';
+// JSON and other raw files use raw/upload, not image/upload
+const CLOUDINARY_RAW_UPLOAD_ROOT = 'https://res.cloudinary.com/spiralyze/raw/upload/';
 
 
 /*  ==================================================
@@ -38,8 +40,9 @@ const fontCheckbox = document.querySelector('.js-include-fonts');
 const imgCheckbox = document.querySelector('.js-include-images');
 const videoCheckbox = document.querySelector('.js-include-videos');
 const gifCheckbox = document.querySelector('.js-include-gifs');
+const jsonCheckbox = document.querySelector('.js-include-json');
 
-const filterCheckboxes = [jsCheckbox, cssCheckbox, imgCheckbox, fontCheckbox, videoCheckbox, gifCheckbox].filter(Boolean);
+const filterCheckboxes = [jsCheckbox, cssCheckbox, imgCheckbox, fontCheckbox, videoCheckbox, gifCheckbox, jsonCheckbox].filter(Boolean);
 
 // drag/dropzon
 const dropzone = document.querySelector('.js-dropzone');
@@ -97,7 +100,7 @@ allFilesInput.addEventListener('change', () => {
     SELECT ALL FILTERS LOGIC (3-state cycle: All → None → JS/CSS/Images → All)
     ================================================== */
 const CORE_CHECKBOXES = [jsCheckbox, cssCheckbox, imgCheckbox]; // JS, CSS, Images
-const EXTRA_CHECKBOXES = [fontCheckbox, videoCheckbox, gifCheckbox]; // Fonts, Videos, GIFs
+const EXTRA_CHECKBOXES = [fontCheckbox, videoCheckbox, gifCheckbox, jsonCheckbox]; // Fonts, Videos, GIFs, JSON
 
 function applySelectAllState(state) {
     // state: 'all' | 'none' | 'core'
@@ -200,7 +203,8 @@ async function processFiles() {
         fonts: fontCheckbox.checked,
         images: imgCheckbox.checked,
         videos: videoCheckbox ? videoCheckbox.checked : true,
-        gifs: gifCheckbox ? gifCheckbox.checked : true
+        gifs: gifCheckbox ? gifCheckbox.checked : true,
+        json: jsonCheckbox ? jsonCheckbox.checked : true
     };
 
     const allFiles = [
@@ -239,7 +243,8 @@ async function processFiles() {
                 fonts: 'FONTS',
                 images: 'IMAGES',
                 videos: 'VIDEOS',
-                gifs: 'GIFS'
+                gifs: 'GIFS',
+                json: 'JSON'
             };
             resultBox.innerText += `\n\n⚠️ Excluded from scan: ${excluded.map(e => labelMap[e] || e.toUpperCase()).join(', ')}`;
         }
@@ -281,36 +286,45 @@ async function extractAssetsFromFiles(files, include) {
         fonts: new Set(),
         videos: new Set(),
         gifs: new Set(),
+        json: new Set(),
     };
 
-    // Regex matches:
-    // - URLs in quotes, parentheses, or plain
-    // - CSS url(...) with or without quotes
-    // - Protocol-relative and absolute URLs
-    // - Common web asset extensions
-    const urlRegex = /(?:url\(\s*['"]?|['"])?((?:https?:)?\/\/[^\s"'()]+\/[^\s"'()]+?\.(js|css|png|jpe?g|svg|webp|gif|mp4|webm|ogg|woff2?|ttf|otf|eot)(\?[^\s"'()]*)?)(?:['"]?\s*\))?/gi;
+    // Full URL regex: matches protocol-relative and absolute URLs
+    // json MUST come before js (otherwise .json matches .js and truncates the URL)
+    const urlRegex = /(?:url\(\s*['"]?|['"])?((?:https?:)?\/\/[^\s"'()]+\/[^\s"'()]+?\.(json|js|css|png|jpe?g|svg|webp|gif|mp4|webm|ogg|woff2?|ttf|otf|eot)(\?[^\s"'()]*)?)(?:['"]?\s*\))?/gi;
 
-    // Relative path regex: paths like fl_sanitize/patchmypc/3001/logo-01.svg (from ${cdnBase}path or 'path')
-    const relativePathRegex = /(?:[}\s'"`])((?:[a-zA-Z0-9_\-]+\/)+[a-zA-Z0-9_\-.]*\.(?:svg|png|jpe?g|webp|gif|mp4|webm|ogg|woff2?|ttf|otf|eot)(?:\?[^\s"')\]\}]*)?)(?=[\s'")\]\}`;,]|$)/gi;
+    // Relative path regex: paths like servicefusion/1035/Json/Var1/file.json
+    const relativePathRegex = /(?:[}\s'"`])((?:[a-zA-Z0-9_\-]+\/)+[a-zA-Z0-9_\-.]*\.(?:svg|png|jpe?g|webp|gif|mp4|webm|ogg|woff2?|ttf|otf|eot|json)(?:\?[^\s"')\]\}]*)?)(?=[\s'")\]\}`;,]|$)/gi;
+
+    const toFullUrl = (candidate) => {
+        const s = (candidate || '').trim();
+        // Full URL: cloudinary.com or any protocol (:// or //) → use as-is
+        if (s.includes('cloudinary.com') || s.includes('://') || s.startsWith('//')) {
+            return s.startsWith('//') ? 'https:' + s : s;
+        }
+        const cleanPath = s.replace(/^\//, '');
+        if (cleanPath.startsWith('raw/upload/') || cleanPath.startsWith('image/upload/')) {
+            return MEDIA_BASE_URL + cleanPath;
+        }
+        const isJson = /\.json([\?#]|$)/i.test(cleanPath);
+        const base = isJson ? CLOUDINARY_RAW_UPLOAD_ROOT : CLOUDINARY_UPLOAD_ROOT;
+        return base + cleanPath;
+    };
 
     for (const file of files) {
         try {
             const text = await file.text();
 
-            // Pass 1: Extract full URLs
+            // Pass 1: Full URLs (cloudinary.com or other domains) → use as-is
             const matches = [...text.matchAll(urlRegex)];
             matches.forEach(match => {
-                let rawUrl = match[1];
-                const fullUrl = rawUrl.startsWith('//') ? 'https:' + rawUrl : rawUrl;
-                addAssetByUrl(fullUrl, assets, include);
+                addAssetByUrl(toFullUrl(match[1]), assets, include);
             });
 
-            // Pass 2: Extract relative paths and resolve against canonical root only.
-            // Using file-specific base URLs (e.g. f_auto/patchmypc/3002/) would produce wrong URLs
-            // when a path like fl_sanitize/patchmypc/3001/logo.svg is meant for the root.
+            // Pass 2: Relative paths (no cloudinary.com) → resolve with appropriate base
             const relativePaths = [...text.matchAll(relativePathRegex)].map(m => m[1].trim());
             relativePaths.forEach(relPath => {
-                const fullUrl = CLOUDINARY_UPLOAD_ROOT + relPath.replace(/^\//, '');
+                const fullUrl = toFullUrl(relPath);
                 if (fullUrl.startsWith(MEDIA_BASE_URL)) {
                     addAssetByUrl(fullUrl, assets, include);
                 }
@@ -330,7 +344,10 @@ async function extractAssetsFromFiles(files, include) {
 function addAssetByUrl(fullUrl, assets, include) {
     const isAllowedMedia = fullUrl.startsWith(MEDIA_BASE_URL);
 
-    if ((fullUrl.endsWith('.js') || fullUrl.includes('.js?')) && include.js) {
+    // Check .json BEFORE .js (since ".json" contains ".js" and would falsely match)
+    if (/\.json([\?#]|$)/i.test(fullUrl) && include.json && isAllowedMedia) {
+        assets.json.add(fullUrl);
+    } else if (/\.js([\?#]|$)/i.test(fullUrl) && include.js) {
         assets.js.add(fullUrl);
     } else if ((fullUrl.endsWith('.css') || fullUrl.includes('.css?')) && include.css) {
         assets.css.add(fullUrl);
@@ -377,6 +394,17 @@ function renderAssetPreview(assetData) {
               </div>
             `).join('')}
           </div>
+        </details>
+      `;
+        } else if (type === 'json') {
+            html += `
+        <details class="preview-section preview-section--json js-json-accordion" open>
+          <summary class="preview-summary">${label} <small>(Lottie animations)</small></summary>
+          <ul class="preview-list">
+            ${[...items].map(url => `
+              <li><a href="${url}" target="_blank">${url}</a></li>
+            `).join('')}
+          </ul>
         </details>
       `;
         } else {
@@ -443,8 +471,43 @@ function groupBy(arr, key) {
 /*  ==================================================
     VALIDATE ASSET URLS VIA FETCH() LOGIC
     ================================================== */
+const FETCH_RETRY_COUNT = 3;
+const FETCH_RETRY_DELAY_MS = 500;
+
+/**
+ * Fetches a URL with retries on 404. Returns { ok, blob, error }.
+ */
+async function fetchWithRetry(url, maxRetries = FETCH_RETRY_COUNT) {
+    let lastError;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const res = await fetch(url);
+            if (res.ok) {
+                const blob = await res.blob();
+                return { ok: true, blob };
+            }
+            lastError = new Error(`HTTP ${res.status}`);
+            if (res.status === 404 && attempt < maxRetries) {
+                await new Promise(r => setTimeout(r, FETCH_RETRY_DELAY_MS));
+                continue;
+            }
+            throw lastError;
+        } catch (err) {
+            lastError = err;
+            const is404 = err.message && err.message.includes('404');
+            if (is404 && attempt < maxRetries) {
+                await new Promise(r => setTimeout(r, FETCH_RETRY_DELAY_MS));
+                continue;
+            }
+            throw lastError;
+        }
+    }
+    throw lastError;
+}
+
 /**
  * Fetches each URL and keeps only those that can be downloaded.
+ * Retries on 404 up to FETCH_RETRY_COUNT times.
  */
 async function validateAndFetchAssets(assets) {
     const result = {
@@ -454,7 +517,8 @@ async function validateAndFetchAssets(assets) {
             css: new Map(),
             js: new Map(),
             videos: new Map(),
-            gifs: new Map()
+            gifs: new Map(),
+            json: new Map()
         },
         validUrls: {
             images: new Set(),
@@ -462,7 +526,8 @@ async function validateAndFetchAssets(assets) {
             css: new Set(),
             js: new Set(),
             videos: new Set(),
-            gifs: new Set()
+            gifs: new Set(),
+            json: new Set()
         },
         failed: []
     };
@@ -501,21 +566,33 @@ async function validateAndFetchAssets(assets) {
                 continue;
             }
 
-            const fetchPromise = fetch(url)
-                .then(async (res) => {
-                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                    const blob = await res.blob();
-                    const filename = generateUniqueName(url);
-                    result.valid[type].set(filename, blob);
-                    result.validUrls[type].add(url);
-                })
-                .catch(err => {
-                    result.failed.push({
-                        url,
-                        type,
-                        reason: err.message
-                    });
+            const fetchPromise = (async () => {
+                let tryUrl = url;
+                let lastErr;
+                for (let attempt = 0; attempt < 2; attempt++) {
+                    try {
+                        const { ok, blob } = await fetchWithRetry(tryUrl);
+                        if (ok && blob) {
+                            const filename = generateUniqueName(tryUrl);
+                            result.valid[type].set(filename, blob);
+                            result.validUrls[type].add(tryUrl);
+                            return;
+                        }
+                    } catch (err) {
+                        lastErr = err;
+                        if (type === 'json' && attempt === 0 && /\.js([\?#]|$)/i.test(tryUrl)) {
+                            tryUrl = tryUrl.replace(/\.js([\?#]|$)/i, '.json$1');
+                            continue;
+                        }
+                        break;
+                    }
+                }
+                result.failed.push({
+                    url: tryUrl,
+                    type,
+                    reason: lastErr?.message || 'Fetch failed'
                 });
+            })();
 
             allFetches.push(fetchPromise);
         }
@@ -624,8 +701,8 @@ generateBtn.addEventListener('click', async () => {
         // Only create folders if there are any assets of that type (with null checks)
         const hasAssets = (type) => zipContent && zipContent[type] && zipContent[type].size > 0;
 
-        // Assets folder for images, fonts, videos, gifs, etc.
-        if (hasAssets('images') || hasAssets('fonts') || hasAssets('videos') || hasAssets('gifs')) {
+        // Assets folder for images, fonts, videos, gifs, json, etc.
+        if (hasAssets('images') || hasAssets('fonts') || hasAssets('videos') || hasAssets('gifs') || hasAssets('json')) {
             const assets = root.folder('assets');
             // Images (png, jpg, svg, webp)
             if (hasAssets('images')) {
@@ -685,6 +762,21 @@ generateBtn.addEventListener('click', async () => {
                     }
                     normalizedTracker.add(finalName);
                     gifFolder.file(finalName, blob);
+                });
+            }
+            // JSON (Lottie animations, etc.)
+            if (hasAssets('json')) {
+                const jsonFolder = assets.folder('json');
+                const normalizedTracker = new Set();
+                zipContent.json.forEach((blob, filename) => {
+                    const baseFilename = filename.split(/[?#]/)[0];
+                    let finalName = baseFilename;
+                    let i = 1;
+                    while (normalizedTracker.has(finalName)) {
+                        finalName = `duplicate-${i++}-${baseFilename}`;
+                    }
+                    normalizedTracker.add(finalName);
+                    jsonFolder.file(finalName, blob);
                 });
             }
         }
