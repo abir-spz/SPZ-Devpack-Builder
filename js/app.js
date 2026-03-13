@@ -20,6 +20,12 @@ let collectedFiles = []; // Manually dropped/uploaded files
 let uploadedFileSet = new Set(); // Ensures unique file list
 let zipContent = null; // Holds validated asset blobs to be zipped
 
+// Only download media (images, videos, gifs, fonts) from this base URL
+const MEDIA_BASE_URL = 'https://res.cloudinary.com/spiralyze/';
+
+// Canonical root for resolving relative paths (avoids wrong combos like 3002 base + 3001 path)
+const CLOUDINARY_UPLOAD_ROOT = 'https://res.cloudinary.com/spiralyze/image/upload/';
+
 
 /*  ==================================================
     DOM REFERENCES (SELECTORS)
@@ -42,14 +48,14 @@ const htmlInput = document.querySelector('.js-html-files');
 const previewBox = document.querySelector('.js-preview');
 const resultBox = document.querySelector('.js-result');
 
-// scan and download buttons
+// scan, download, and clear buttons
 const scanBtn = document.querySelector('.js-btn-scan');
 const downloadBtn = document.querySelector('.js-btn-download');
+const clearBtn = document.querySelector('.js-btn-clear');
 
 // modal selectors
 const modal = document.querySelector('.js-modal');
 const testNameInput = document.querySelector('.js-test-name');
-const testNumberInput = document.querySelector('.js-test-number');
 const generateBtn = document.querySelector('.js-generate-zip');
 
 
@@ -144,36 +150,45 @@ async function processFiles() {
         return;
     }
 
-    // Step 1: extract asset links using regex
-    const assetData = await extractAssetsFromFiles(allFiles, include);
+    // Loading state
+    scanBtn.disabled = true;
+    scanBtn.textContent = 'Scanning...';
 
-    // Step 2: render collapsible UI previews
-    renderAssetPreview(assetData);
+    try {
+        // Step 1: extract asset links using regex
+        const assetData = await extractAssetsFromFiles(allFiles, include);
 
-    // Step 3: validate external asset URLs (downloadable?)
-    resultBox.innerText = "Validating assets...";
-    const validationResult = await validateAndFetchAssets(assetData);
-    zipContent = validationResult.valid;
+        // Step 2: validate external asset URLs (downloadable?)
+        resultBox.innerText = "Validating assets...";
+        const validationResult = await validateAndFetchAssets(assetData);
+        zipContent = validationResult.valid;
 
-    resultBox.innerText = "Validation complete. Click download to proceed.";
+        resultBox.innerText = "Validation complete. Click download to proceed.";
 
-    const excluded = Object.keys(include).filter(key => !include[key]);
-    if (excluded.length > 0) {
-        // Custom labels for user-friendly message
-        const labelMap = {
-            js: 'JS',
-            css: 'CSS',
-            fonts: 'FONTS',
-            images: 'IMAGES',
-            videos: 'VIDEOS',
-            gifs: 'GIFS'
-        };
-        resultBox.innerText += `\n\n⚠️ Excluded from scan: ${excluded.map(e => labelMap[e] || e.toUpperCase()).join(', ')}`;
-    }
+        const excluded = Object.keys(include).filter(key => !include[key]);
+        if (excluded.length > 0) {
+            // Custom labels for user-friendly message
+            const labelMap = {
+                js: 'JS',
+                css: 'CSS',
+                fonts: 'FONTS',
+                images: 'IMAGES',
+                videos: 'VIDEOS',
+                gifs: 'GIFS'
+            };
+            resultBox.innerText += `\n\n⚠️ Excluded from scan: ${excluded.map(e => labelMap[e] || e.toUpperCase()).join(', ')}`;
+        }
 
-    // Step 4: show failed URLs (CORS, 404 etc.)
-    if (validationResult.failed.length > 0) {
-        renderFailedAssets(validationResult.failed);
+        // Step 3: render preview with only successfully validated assets (404s etc. excluded)
+        renderAssetPreview(validationResult.validUrls);
+
+        // Step 4: show failed URLs (CORS, 404 etc.) only in Failed tab
+        if (validationResult.failed.length > 0) {
+            renderFailedAssets(validationResult.failed);
+        }
+    } finally {
+        scanBtn.disabled = false;
+        scanBtn.textContent = 'Scan & Validate';
     }
 }
 
@@ -193,6 +208,8 @@ async function extractAssetsFromFiles(files, include) {
         css: new Set(),
         js: new Set(),
         fonts: new Set(),
+        videos: new Set(),
+        gifs: new Set(),
     };
 
     // Regex matches:
@@ -200,30 +217,31 @@ async function extractAssetsFromFiles(files, include) {
     // - CSS url(...) with or without quotes
     // - Protocol-relative and absolute URLs
     // - Common web asset extensions
-        // Improved regex: only match file extensions after a slash, not in the domain
-        const urlRegex = /(?:url\(\s*['"]?|['"])?((?:https?:)?\/\/[^\s"'()]+\/[^\s"'()]+?\.(js|css|png|jpe?g|svg|webp|gif|mp4|webm|ogg|woff2?|ttf|otf|eot)(\?[^\s"'()]*)?)(?:['"]?\s*\))?/gi;
-    // prev const urlRegex = /(?:url\(\s*['"]?|['"])?((?:https?:)?\/\/[^\s"'()]+?\.(js|css|png|jpe?g|svg|webp|woff2?|ttf|otf|eot)(\?[^\s"'()]*)?)(?:['"]?\s*\))?/gi;
+    const urlRegex = /(?:url\(\s*['"]?|['"])?((?:https?:)?\/\/[^\s"'()]+\/[^\s"'()]+?\.(js|css|png|jpe?g|svg|webp|gif|mp4|webm|ogg|woff2?|ttf|otf|eot)(\?[^\s"'()]*)?)(?:['"]?\s*\))?/gi;
+
+    // Relative path regex: paths like fl_sanitize/patchmypc/3001/logo-01.svg (from ${cdnBase}path or 'path')
+    const relativePathRegex = /(?:[}\s'"`])((?:[a-zA-Z0-9_\-]+\/)+[a-zA-Z0-9_\-.]*\.(?:svg|png|jpe?g|webp|gif|mp4|webm|ogg|woff2?|ttf|otf|eot)(?:\?[^\s"')\]\}]*)?)(?=[\s'")\]\}`;,]|$)/gi;
 
     for (const file of files) {
         try {
             const text = await file.text();
 
+            // Pass 1: Extract full URLs
             const matches = [...text.matchAll(urlRegex)];
             matches.forEach(match => {
-                let rawUrl = match[1]; // Use the captured group for the actual URL
-
-                // Normalize protocol
+                let rawUrl = match[1];
                 const fullUrl = rawUrl.startsWith('//') ? 'https:' + rawUrl : rawUrl;
+                addAssetByUrl(fullUrl, assets, include);
+            });
 
-                // Categorize based on extension and add to sets
-                if ((fullUrl.endsWith('.js') || fullUrl.includes('.js?')) && include.js) {
-                    assets.js.add(fullUrl);
-                } else if ((fullUrl.endsWith('.css') || fullUrl.includes('.css?')) && include.css) {
-                    assets.css.add(fullUrl);
-                } else if (/\.(png|jpe?g|svg|webp|gif|mp4|webm|ogg)([\?#][^"')\s]*)?$/i.test(fullUrl) && include.images) {
-                    assets.images.add(fullUrl);
-                } else if (/\.(woff2?|ttf|otf|eot)([\?#][^"')\s]*)?$/i.test(fullUrl) && include.fonts) {
-                    assets.fonts.add(fullUrl);
+            // Pass 2: Extract relative paths and resolve against canonical root only.
+            // Using file-specific base URLs (e.g. f_auto/patchmypc/3002/) would produce wrong URLs
+            // when a path like fl_sanitize/patchmypc/3001/logo.svg is meant for the root.
+            const relativePaths = [...text.matchAll(relativePathRegex)].map(m => m[1].trim());
+            relativePaths.forEach(relPath => {
+                const fullUrl = CLOUDINARY_UPLOAD_ROOT + relPath.replace(/^\//, '');
+                if (fullUrl.startsWith(MEDIA_BASE_URL)) {
+                    addAssetByUrl(fullUrl, assets, include);
                 }
             });
         } catch (err) {
@@ -232,6 +250,30 @@ async function extractAssetsFromFiles(files, include) {
     }
 
     return assets;
+}
+
+/**
+ * Categorizes a URL and adds it to the appropriate asset set.
+ * Media assets (images, videos, gifs, fonts) are only included if from the allowed base URL.
+ */
+function addAssetByUrl(fullUrl, assets, include) {
+    const isAllowedMedia = fullUrl.startsWith(MEDIA_BASE_URL);
+
+    if ((fullUrl.endsWith('.js') || fullUrl.includes('.js?')) && include.js) {
+        assets.js.add(fullUrl);
+    } else if ((fullUrl.endsWith('.css') || fullUrl.includes('.css?')) && include.css) {
+        assets.css.add(fullUrl);
+    } else if (/\.(woff2?|ttf|otf|eot)([\?#][^"')\s]*)?$/i.test(fullUrl) && include.fonts && isAllowedMedia) {
+        assets.fonts.add(fullUrl);
+    } else if (/\.(mp4|webm|ogg)([\?#][^"')\s]*)?$/i.test(fullUrl) && include.videos && isAllowedMedia) {
+        assets.videos.add(fullUrl);
+    } else if (/\.gif([\?#][^"')\s]*)?$/i.test(fullUrl) && include.gifs && isAllowedMedia) {
+        assets.gifs.add(fullUrl);
+    } else if (/\.svg([\?#][^"')\s]*)?$/i.test(fullUrl) && isAllowedMedia) {
+        assets.images.add(fullUrl);
+    } else if (/\.(png|jpe?g|webp)([\?#][^"')\s]*)?$/i.test(fullUrl) && include.images && isAllowedMedia) {
+        assets.images.add(fullUrl);
+    }
 }
 
 
@@ -245,10 +287,14 @@ async function extractAssetsFromFiles(files, include) {
 function renderAssetPreview(assetData) {
     let html = `<p><strong>Assets Detected:</strong></p>`;
 
+    const thumbTypes = ['images', 'gifs']; // Show as thumbnails
+    const listTypes = ['css', 'js', 'fonts', 'videos']; // Show as list
+
     Object.entries(assetData).forEach(([type, items]) => {
+        if (items.size === 0) return;
         const label = `${type.toUpperCase()} (${items.size})`;
 
-        if (type === 'images') {
+        if (thumbTypes.includes(type)) {
             html += `
         <details class="preview-section">
           <summary class="preview-summary">${label}</summary>
@@ -334,7 +380,17 @@ async function validateAndFetchAssets(assets) {
             images: new Map(),
             fonts: new Map(),
             css: new Map(),
-            js: new Map()
+            js: new Map(),
+            videos: new Map(),
+            gifs: new Map()
+        },
+        validUrls: {
+            images: new Set(),
+            fonts: new Set(),
+            css: new Set(),
+            js: new Set(),
+            videos: new Set(),
+            gifs: new Set()
         },
         failed: []
     };
@@ -379,6 +435,7 @@ async function validateAndFetchAssets(assets) {
                     const blob = await res.blob();
                     const filename = generateUniqueName(url);
                     result.valid[type].set(filename, blob);
+                    result.validUrls[type].add(url);
                 })
                 .catch(err => {
                     result.failed.push({
@@ -400,9 +457,7 @@ async function validateAndFetchAssets(assets) {
 /*  ==================================================
     ZIP DOWNLOAD MODAL INPUTS LOGIC
     ================================================== */
-[testNameInput].forEach(input =>
-    input.addEventListener('input', validateInputs)
-);
+testNameInput.addEventListener('input', validateInputs);
 
 /**
  * Enables "Download ZIP" button if inputs are valid
@@ -435,6 +490,29 @@ downloadBtn.addEventListener('click', () => {
     alert("Please scan and validate assets first.");
 });
 
+/*  ==================================================
+    CLEAR / RESET LOGIC
+    ================================================== */
+if (clearBtn) clearBtn.addEventListener('click', resetAll);
+
+function resetAll() {
+    collectedFiles = [];
+    uploadedFileSet.clear();
+    zipContent = null;
+
+    // Clear file inputs
+    jsInput.value = '';
+    cssInput.value = '';
+    htmlInput.value = '';
+
+    // Clear preview and result
+    previewBox.innerHTML = '';
+    resultBox.innerHTML = '';
+
+    // Close modal if open
+    modal.classList.remove('modal--show');
+}
+
 
 /*  ==================================================
     ZIP GENERATION LOGIC
@@ -450,7 +528,11 @@ generateBtn.addEventListener('click', async () => {
     const filename = `Devpack-${name}-${date}.zip`;
     const folderName = `${name}-devpack`;
 
+    // Loading state
+    generateBtn.disabled = true;
+    generateBtn.textContent = 'Generating ZIP...';
 
+    try {
     const zip = new JSZip();
     const root = zip.folder(folderName);
 
@@ -467,28 +549,25 @@ generateBtn.addEventListener('click', async () => {
         root.file(baseName, file);
     });
 
-    // Only create folders if there are any assets of that type
-    const hasAssets = (type) => zipContent[type] && zipContent[type].size > 0;
+    // Only create folders if there are any assets of that type (with null checks)
+    const hasAssets = (type) => zipContent && zipContent[type] && zipContent[type].size > 0;
 
     // Assets folder for images, fonts, videos, gifs, etc.
     if (hasAssets('images') || hasAssets('fonts') || hasAssets('videos') || hasAssets('gifs')) {
         const assets = root.folder('assets');
-        // Images
+        // Images (png, jpg, svg, webp)
         if (hasAssets('images')) {
             const imgFolder = assets.folder('images');
             const normalizedTracker = new Set();
             zipContent.images.forEach((blob, filename) => {
-                // Only add if not gif or video
-                if (!/\.(gif|mp4|webm|ogg)$/i.test(filename)) {
-                    const baseFilename = filename.split(/[?#]/)[0];
-                    let finalName = baseFilename;
-                    let i = 1;
-                    while (normalizedTracker.has(finalName)) {
-                        finalName = `duplicate-${i++}-${baseFilename}`;
-                    }
-                    normalizedTracker.add(finalName);
-                    imgFolder.file(finalName, blob);
+                const baseFilename = filename.split(/[?#]/)[0];
+                let finalName = baseFilename;
+                let i = 1;
+                while (normalizedTracker.has(finalName)) {
+                    finalName = `duplicate-${i++}-${baseFilename}`;
                 }
+                normalizedTracker.add(finalName);
+                imgFolder.file(finalName, blob);
             });
         }
         // Fonts
@@ -507,45 +586,33 @@ generateBtn.addEventListener('click', async () => {
             });
         }
         // Videos
-        let hasVideo = false;
-        zipContent.images && zipContent.images.forEach((_, filename) => {
-            if (/\.(mp4|webm|ogg)$/i.test(filename)) hasVideo = true;
-        });
-        if (hasVideo) {
+        if (hasAssets('videos')) {
             const videoFolder = assets.folder('videos');
             const normalizedTracker = new Set();
-            zipContent.images.forEach((blob, filename) => {
-                if (/\.(mp4|webm|ogg)$/i.test(filename)) {
-                    const baseFilename = filename.split(/[?#]/)[0];
-                    let finalName = baseFilename;
-                    let i = 1;
-                    while (normalizedTracker.has(finalName)) {
-                        finalName = `duplicate-${i++}-${baseFilename}`;
-                    }
-                    normalizedTracker.add(finalName);
-                    videoFolder.file(finalName, blob);
+            zipContent.videos.forEach((blob, filename) => {
+                const baseFilename = filename.split(/[?#]/)[0];
+                let finalName = baseFilename;
+                let i = 1;
+                while (normalizedTracker.has(finalName)) {
+                    finalName = `duplicate-${i++}-${baseFilename}`;
                 }
+                normalizedTracker.add(finalName);
+                videoFolder.file(finalName, blob);
             });
         }
         // Gifs
-        let hasGif = false;
-        zipContent.images && zipContent.images.forEach((_, filename) => {
-            if (/\.gif$/i.test(filename)) hasGif = true;
-        });
-        if (hasGif) {
+        if (hasAssets('gifs')) {
             const gifFolder = assets.folder('gifs');
             const normalizedTracker = new Set();
-            zipContent.images.forEach((blob, filename) => {
-                if (/\.gif$/i.test(filename)) {
-                    const baseFilename = filename.split(/[?#]/)[0];
-                    let finalName = baseFilename;
-                    let i = 1;
-                    while (normalizedTracker.has(finalName)) {
-                        finalName = `duplicate-${i++}-${baseFilename}`;
-                    }
-                    normalizedTracker.add(finalName);
-                    gifFolder.file(finalName, blob);
+            zipContent.gifs.forEach((blob, filename) => {
+                const baseFilename = filename.split(/[?#]/)[0];
+                let finalName = baseFilename;
+                let i = 1;
+                while (normalizedTracker.has(finalName)) {
+                    finalName = `duplicate-${i++}-${baseFilename}`;
                 }
+                normalizedTracker.add(finalName);
+                gifFolder.file(finalName, blob);
             });
         }
     }
@@ -587,6 +654,11 @@ generateBtn.addEventListener('click', async () => {
     });
     saveAs(content, filename);
     modal.classList.remove('modal--show');
+    } finally {
+        // Reset button state
+        generateBtn.textContent = 'Download ZIP';
+        validateInputs();
+    }
 });
 
 
