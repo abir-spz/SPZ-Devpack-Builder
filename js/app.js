@@ -39,14 +39,13 @@ const imgCheckbox = document.querySelector('.js-include-images');
 // drag/dropzon
 const dropzone = document.querySelector('.js-dropzone');
 
-// file inputs
-const jsInput = document.querySelector('.js-js-files');
-const cssInput = document.querySelector('.js-css-files');
-const htmlInput = document.querySelector('.js-html-files');
+// file input (accepts .js, .css, .html)
+const allFilesInput = document.querySelector('.js-all-files');
 
-// preview and result section blocks
+// preview, result, and error section blocks
 const previewBox = document.querySelector('.js-preview');
 const resultBox = document.querySelector('.js-result');
+const errorBox = document.querySelector('.js-error');
 
 // scan, download, and clear buttons
 const scanBtn = document.querySelector('.js-btn-scan');
@@ -62,6 +61,9 @@ const generateBtn = document.querySelector('.js-generate-zip');
 /*  ==================================================
     FILE DRAG & DROP + MANUAL FILE UPLOAD LOGIC
     ================================================== */
+// Click dropzone to open file picker
+dropzone.addEventListener('click', () => allFilesInput.click());
+
 // Highlight dropzone on drag
 dropzone.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -81,13 +83,24 @@ dropzone.addEventListener('drop', (e) => {
 });
 
 // handle uploaded files
-[jsInput, cssInput, htmlInput].forEach(input => {
-    input.addEventListener('change', () => {
-        const files = [...input.files];
-        //collectedFiles.push(...files);
-        updatePreview(files);
-    });
+allFilesInput.addEventListener('change', () => {
+    const files = [...allFilesInput.files];
+    updatePreview(files);
 });
+
+/**
+ * Shows an error message above the CTAs. Pass empty string to hide.
+ */
+function showError(message) {
+    if (!errorBox) return;
+    if (message) {
+        errorBox.textContent = message;
+        errorBox.classList.add('devpack__error--show');
+    } else {
+        errorBox.textContent = '';
+        errorBox.classList.remove('devpack__error--show');
+    }
+}
 
 /**
  * Displays names of newly added files in preview area.
@@ -139,16 +152,16 @@ async function processFiles() {
     };
 
     const allFiles = [
-        ...jsInput.files,
-        ...cssInput.files,
-        ...htmlInput.files,
+        ...(allFilesInput.files || []),
         ...collectedFiles
     ];
 
     if (allFiles.length === 0) {
-        alert('Please add files before scanning.');
+        showError('Please add files before scanning.');
         return;
     }
+
+    showError(''); // Clear any previous error
 
     // Loading state
     scanBtn.disabled = true;
@@ -182,7 +195,13 @@ async function processFiles() {
         // Step 3: render preview with only successfully validated assets (404s etc. excluded)
         renderAssetPreview(validationResult.validUrls);
 
-        // Step 4: show failed URLs (CORS, 404 etc.) only in Failed tab
+        // Step 4: scroll to images accordion (open by default)
+        const imagesAccordion = previewBox.querySelector('.js-images-accordion');
+        if (imagesAccordion) {
+            imagesAccordion.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        // Step 5: show failed URLs (CORS, 404 etc.) only in Failed tab
         if (validationResult.failed.length > 0) {
             renderFailedAssets(validationResult.failed);
         }
@@ -295,8 +314,9 @@ function renderAssetPreview(assetData) {
         const label = `${type.toUpperCase()} (${items.size})`;
 
         if (thumbTypes.includes(type)) {
+            const imagesClass = type === 'images' ? ' js-images-accordion' : '';
             html += `
-        <details class="preview-section">
+        <details class="preview-section${imagesClass}" open>
           <summary class="preview-summary">${label}</summary>
           <div class="preview-grid">
             ${[...items].map(url => `
@@ -309,7 +329,7 @@ function renderAssetPreview(assetData) {
       `;
         } else {
             html += `
-        <details class="preview-section">
+        <details class="preview-section" open>
           <summary class="preview-summary">${label}</summary>
           <ul class="preview-list">
             ${[...items].map(url => `
@@ -336,11 +356,11 @@ function renderFailedAssets(failedList) {
     const grouped = groupBy(failedList, 'type');
 
     let html = `
-    <details class="preview-section preview-section--error">
+    <details class="preview-section preview-section--error" open>
       <summary class="preview-summary">❌ Failed Downloads (${failedList.length})</summary>
       ${Object.entries(grouped).map(([type, list]) => `
         <div>
-          <strong>${type.toUpperCase()} (${list.length}):</strong>
+          <strong style="padding: 0 10px">${type.toUpperCase()} (${list.length}):</strong>
           <ul class="preview-list error-list">
             ${list.map(item => `
               <li>
@@ -484,10 +504,11 @@ downloadBtn.addEventListener('click', () => {
     }
     // Fallback: if no assets, but user uploaded files exist, allow download
     if (hasAssets || (collectedFiles && collectedFiles.length > 0)) {
+        showError('');
         modal.classList.add('modal--show');
         return;
     }
-    alert("Please scan and validate assets first.");
+    showError('Please scan and validate assets first.');
 });
 
 /*  ==================================================
@@ -500,14 +521,13 @@ function resetAll() {
     uploadedFileSet.clear();
     zipContent = null;
 
-    // Clear file inputs
-    jsInput.value = '';
-    cssInput.value = '';
-    htmlInput.value = '';
+    // Clear file input
+    allFilesInput.value = '';
 
-    // Clear preview and result
+    // Clear preview, result, and error
     previewBox.innerHTML = '';
     resultBox.innerHTML = '';
+    showError('');
 
     // Close modal if open
     modal.classList.remove('modal--show');
@@ -533,127 +553,127 @@ generateBtn.addEventListener('click', async () => {
     generateBtn.textContent = 'Generating ZIP...';
 
     try {
-    const zip = new JSZip();
-    const root = zip.folder(folderName);
+        const zip = new JSZip();
+        const root = zip.folder(folderName);
 
-    // Deduplicate by file content key
-    const fileKeyTracker = new Set();
-    collectedFiles.forEach(file => {
-        const fileKey = `${file.name}-${file.size}-${file.lastModified}`;
-        let baseName = file.name;
-        let i = 1;
-        while (fileKeyTracker.has(fileKey)) {
-            baseName = `duplicate-${i++}-${file.name}`;
-        }
-        fileKeyTracker.add(fileKey);
-        root.file(baseName, file);
-    });
-
-    // Only create folders if there are any assets of that type (with null checks)
-    const hasAssets = (type) => zipContent && zipContent[type] && zipContent[type].size > 0;
-
-    // Assets folder for images, fonts, videos, gifs, etc.
-    if (hasAssets('images') || hasAssets('fonts') || hasAssets('videos') || hasAssets('gifs')) {
-        const assets = root.folder('assets');
-        // Images (png, jpg, svg, webp)
-        if (hasAssets('images')) {
-            const imgFolder = assets.folder('images');
-            const normalizedTracker = new Set();
-            zipContent.images.forEach((blob, filename) => {
-                const baseFilename = filename.split(/[?#]/)[0];
-                let finalName = baseFilename;
-                let i = 1;
-                while (normalizedTracker.has(finalName)) {
-                    finalName = `duplicate-${i++}-${baseFilename}`;
-                }
-                normalizedTracker.add(finalName);
-                imgFolder.file(finalName, blob);
-            });
-        }
-        // Fonts
-        if (hasAssets('fonts')) {
-            const fontFolder = assets.folder('fonts');
-            const normalizedTracker = new Set();
-            zipContent.fonts.forEach((blob, filename) => {
-                const baseFilename = filename.split(/[?#]/)[0];
-                let finalName = baseFilename;
-                let i = 1;
-                while (normalizedTracker.has(finalName)) {
-                    finalName = `duplicate-${i++}-${baseFilename}`;
-                }
-                normalizedTracker.add(finalName);
-                fontFolder.file(finalName, blob);
-            });
-        }
-        // Videos
-        if (hasAssets('videos')) {
-            const videoFolder = assets.folder('videos');
-            const normalizedTracker = new Set();
-            zipContent.videos.forEach((blob, filename) => {
-                const baseFilename = filename.split(/[?#]/)[0];
-                let finalName = baseFilename;
-                let i = 1;
-                while (normalizedTracker.has(finalName)) {
-                    finalName = `duplicate-${i++}-${baseFilename}`;
-                }
-                normalizedTracker.add(finalName);
-                videoFolder.file(finalName, blob);
-            });
-        }
-        // Gifs
-        if (hasAssets('gifs')) {
-            const gifFolder = assets.folder('gifs');
-            const normalizedTracker = new Set();
-            zipContent.gifs.forEach((blob, filename) => {
-                const baseFilename = filename.split(/[?#]/)[0];
-                let finalName = baseFilename;
-                let i = 1;
-                while (normalizedTracker.has(finalName)) {
-                    finalName = `duplicate-${i++}-${baseFilename}`;
-                }
-                normalizedTracker.add(finalName);
-                gifFolder.file(finalName, blob);
-            });
-        }
-    }
-
-    // Script folder for js
-    if (hasAssets('js')) {
-        const scriptFolder = root.folder('script');
-        const normalizedTracker = new Set();
-        zipContent.js.forEach((blob, filename) => {
-            const baseFilename = filename.split(/[?#]/)[0];
-            let finalName = baseFilename;
+        // Deduplicate by file content key
+        const fileKeyTracker = new Set();
+        collectedFiles.forEach(file => {
+            const fileKey = `${file.name}-${file.size}-${file.lastModified}`;
+            let baseName = file.name;
             let i = 1;
-            while (normalizedTracker.has(finalName)) {
-                finalName = `duplicate-${i++}-${baseFilename}`;
+            while (fileKeyTracker.has(fileKey)) {
+                baseName = `duplicate-${i++}-${file.name}`;
             }
-            normalizedTracker.add(finalName);
-            scriptFolder.file(finalName, blob);
+            fileKeyTracker.add(fileKey);
+            root.file(baseName, file);
         });
-    }
 
-    // Style folder for css
-    if (hasAssets('css')) {
-        const styleFolder = root.folder('style');
-        const normalizedTracker = new Set();
-        zipContent.css.forEach((blob, filename) => {
-            const baseFilename = filename.split(/[?#]/)[0];
-            let finalName = baseFilename;
-            let i = 1;
-            while (normalizedTracker.has(finalName)) {
-                finalName = `duplicate-${i++}-${baseFilename}`;
+        // Only create folders if there are any assets of that type (with null checks)
+        const hasAssets = (type) => zipContent && zipContent[type] && zipContent[type].size > 0;
+
+        // Assets folder for images, fonts, videos, gifs, etc.
+        if (hasAssets('images') || hasAssets('fonts') || hasAssets('videos') || hasAssets('gifs')) {
+            const assets = root.folder('assets');
+            // Images (png, jpg, svg, webp)
+            if (hasAssets('images')) {
+                const imgFolder = assets.folder('images');
+                const normalizedTracker = new Set();
+                zipContent.images.forEach((blob, filename) => {
+                    const baseFilename = filename.split(/[?#]/)[0];
+                    let finalName = baseFilename;
+                    let i = 1;
+                    while (normalizedTracker.has(finalName)) {
+                        finalName = `duplicate-${i++}-${baseFilename}`;
+                    }
+                    normalizedTracker.add(finalName);
+                    imgFolder.file(finalName, blob);
+                });
             }
-            normalizedTracker.add(finalName);
-            styleFolder.file(finalName, blob);
-        });
-    }
+            // Fonts
+            if (hasAssets('fonts')) {
+                const fontFolder = assets.folder('fonts');
+                const normalizedTracker = new Set();
+                zipContent.fonts.forEach((blob, filename) => {
+                    const baseFilename = filename.split(/[?#]/)[0];
+                    let finalName = baseFilename;
+                    let i = 1;
+                    while (normalizedTracker.has(finalName)) {
+                        finalName = `duplicate-${i++}-${baseFilename}`;
+                    }
+                    normalizedTracker.add(finalName);
+                    fontFolder.file(finalName, blob);
+                });
+            }
+            // Videos
+            if (hasAssets('videos')) {
+                const videoFolder = assets.folder('videos');
+                const normalizedTracker = new Set();
+                zipContent.videos.forEach((blob, filename) => {
+                    const baseFilename = filename.split(/[?#]/)[0];
+                    let finalName = baseFilename;
+                    let i = 1;
+                    while (normalizedTracker.has(finalName)) {
+                        finalName = `duplicate-${i++}-${baseFilename}`;
+                    }
+                    normalizedTracker.add(finalName);
+                    videoFolder.file(finalName, blob);
+                });
+            }
+            // Gifs
+            if (hasAssets('gifs')) {
+                const gifFolder = assets.folder('gifs');
+                const normalizedTracker = new Set();
+                zipContent.gifs.forEach((blob, filename) => {
+                    const baseFilename = filename.split(/[?#]/)[0];
+                    let finalName = baseFilename;
+                    let i = 1;
+                    while (normalizedTracker.has(finalName)) {
+                        finalName = `duplicate-${i++}-${baseFilename}`;
+                    }
+                    normalizedTracker.add(finalName);
+                    gifFolder.file(finalName, blob);
+                });
+            }
+        }
 
-    const content = await zip.generateAsync({
-        type: "blob"
-    });
-    saveAs(content, filename);
-    modal.classList.remove('modal--show');
+        // Script folder for js
+        if (hasAssets('js')) {
+            const scriptFolder = root.folder('script');
+            const normalizedTracker = new Set();
+            zipContent.js.forEach((blob, filename) => {
+                const baseFilename = filename.split(/[?#]/)[0];
+                let finalName = baseFilename;
+                let i = 1;
+                while (normalizedTracker.has(finalName)) {
+                    finalName = `duplicate-${i++}-${baseFilename}`;
+                }
+                normalizedTracker.add(finalName);
+                scriptFolder.file(finalName, blob);
+            });
+        }
+
+        // Style folder for css
+        if (hasAssets('css')) {
+            const styleFolder = root.folder('style');
+            const normalizedTracker = new Set();
+            zipContent.css.forEach((blob, filename) => {
+                const baseFilename = filename.split(/[?#]/)[0];
+                let finalName = baseFilename;
+                let i = 1;
+                while (normalizedTracker.has(finalName)) {
+                    finalName = `duplicate-${i++}-${baseFilename}`;
+                }
+                normalizedTracker.add(finalName);
+                styleFolder.file(finalName, blob);
+            });
+        }
+
+        const content = await zip.generateAsync({
+            type: "blob"
+        });
+        saveAs(content, filename);
+        modal.classList.remove('modal--show');
     } finally {
         // Reset button state
         generateBtn.textContent = 'Download ZIP';
