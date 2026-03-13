@@ -1,5 +1,5 @@
 /**
- * SPZ Devpack Builder v1.0.0
+ * SPZ Devpack Builder v1.5.0
  * ------------------------------------------
  * This app allows users to upload JS, CSS, and HTML files,
  * automatically scans and extracts asset URLs (images, fonts, CSS, JS) from the files,
@@ -9,7 +9,7 @@
  *
  * @author   Abir Maiti
  * @company  Spiralyze
- * @version  1.0.0
+ * @version  1.5.0
  */
 
 
