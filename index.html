@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-        <title>SPZ Devpack Builder v1.0.0</title>
+        <title>SPZ Devpack Builder</title>
 
         <link rel="icon" href="images/favicon-32x32.png" type="image/png">
         
@@ -19,8 +19,8 @@
                 <div class="container">
                     <div class="devpack__banner__row">
                         <div class="devpack__banner__col">
-                            <h1 class="devpack__title">SPZ Devpack Builder<small>v1.0.0</small></h1>
-                            <p class="devpack__note__small">An app, which allows users to upload JS, CSS, and HTML files and automatically scans and extracts asset URLs (images, fonts, CSS, JS) from the files, then validates and downloads those assets, and packages everything into a ZIP file.</p>
+                            <h1 class="devpack__title">SPZ Devpack Builder<small>v1.5.0</small></h1>
+                            <p class="devpack__note__small">Upload JS, CSS, and HTML files (select all at once). The app scans and extracts asset URLs—images (incl. SVG), videos, gifs, fonts, CSS, and JS—including base URL + relative path patterns. It validates and downloads only media from res.cloudinary.com/spiralyze, excludes failed URLs from the asset list, and packages everything into a ZIP file.</p>
                             <p class="devpack__note">Note: This only works in Chromium-based browsers (like Chrome or Edge).</p>
                         </div>
                         <div class="devpack__banner__col">
@@ -44,12 +44,14 @@
                 <div class="container">
                     <!-- File type filters -->
                     <div class="devpack__filters">
+                        <label class="devpack__filters__all"><input type="checkbox" id="selectAll" class="js-select-all" /> Select All</label>
                         <label><input type="checkbox" id="includeJS" checked class="js-include-js" /> Include JS</label>
                         <label><input type="checkbox" id="includeCSS" checked class="js-include-css" /> Include CSS</label>
                         <label><input type="checkbox" id="includeImages" checked class="js-include-images" /> Include Images</label>
                         <label><input type="checkbox" id="includeFonts"  class="js-include-fonts" /> Include Fonts</label>
                         <label><input type="checkbox" id="includeVideos" class="js-include-videos" /> Include Videos</label>
                         <label><input type="checkbox" id="includeGifs" class="js-include-gifs" /> Include GIFs</label>
+                        <label><input type="checkbox" id="includeJson" class="js-include-json" /> Include JSON</label>
                     </div>
 
                     <!-- File uploaders -->
@@ -60,31 +62,21 @@
                         <div class="devpack__uploaders__group">
                             <div class="devpack__uploaders__group__single">
                                 <span>Upload</span>
-                                <span>JS</span>
+                                <span>JS / CSS / HTML</span>
 
-                                <input type="file" multiple accept=".js" class="devpack__input js-js-files" />
-                            </div>
-
-                            <div class="devpack__uploaders__group__single">
-                                <span>Upload</span>
-                                <span>CSS</span>
-
-                                <input type="file" multiple accept=".css" class="devpack__input js-css-files" />
-                            </div>
-
-                            <div class="devpack__uploaders__group__single">
-                                <span>Upload</span>
-                                <span>HTML</span>
-
-                                <input type="file" multiple accept=".html" class="devpack__input js-html-files" />
+                                <input type="file" multiple accept=".js,.css,.html" class="devpack__input js-all-files" />
                             </div>
                         </div>
                     </div>
+
+                    <!-- Error message (shown above CTAs) -->
+                    <div class="devpack__error js-error" role="alert" aria-live="polite"></div>
 
                     <!-- Action buttons -->
                     <div class="devpack__actions">
                         <button class="devpack__btn devpack__btn--scan js-btn-scan">Scan & Validate</button>
                         <button class="devpack__btn devpack__btn--download js-btn-download">Proceed to Download</button>
+                        <button class="devpack__btn devpack__btn--clear js-btn-clear">Clear All</button>
                     </div>
 
                     <!-- Preview and result -->
